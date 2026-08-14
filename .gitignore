@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
+*.log
+.vite/
+downloads/
+.playwright-cli/
+.playwright-mcp/
+output/
+/*.png
