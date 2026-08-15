@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "zhidaole-dashscope-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-15",
+  "account_id": "bf277c257e6a9b4f0f06a6bb7ab30e9e",
+  "workers_dev": true,
+  "vars": {
+    "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

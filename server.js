@@ -17,10 +17,14 @@ app.use(express.json({ limit: "256kb" }));
 app.get("/favicon.ico", (_request, response) => response.status(204).end());
 
 api.get("/health", (_request, response) => {
+  const relayConfigured = Boolean(
+    process.env.DASHSCOPE_RELAY_URL && process.env.DASHSCOPE_RELAY_TOKEN
+  );
   response.json({
     ok: true,
     model: process.env.DASHSCOPE_MODEL || "qwen-plus",
-    apiConfigured: Boolean(process.env.DASHSCOPE_API_KEY)
+    apiConfigured: relayConfigured || Boolean(process.env.DASHSCOPE_API_KEY),
+    connection: relayConfigured ? "relay" : "direct"
   });
 });
 

@@ -752,6 +752,10 @@ input:disabled {
   overflow: hidden;
 }
 
+.job-card--content-fit {
+  aspect-ratio: auto;
+}
+
 .job-card__section + .job-card__section {
   margin-top: 11px;
 }

@@ -191,7 +191,10 @@ async function requestBailian(
   }
 
   const apiKey = process.env.DASHSCOPE_API_KEY;
-  if (!apiKey) {
+  const relayUrl = String(process.env.DASHSCOPE_RELAY_URL || "").replace(/\/$/, "");
+  const relayToken = process.env.DASHSCOPE_RELAY_TOKEN;
+  const useRelay = Boolean(relayUrl && relayToken);
+  if (!useRelay && !apiKey) {
     const error = new Error("尚未配置百炼 API Key");
     error.code = "missing_api_key";
     throw error;
@@ -222,15 +225,23 @@ async function requestBailian(
     let response;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        response = await fetch(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal
-        });
+        response = await fetch(
+          useRelay ? `${relayUrl}/chat/completions` : `${baseUrl}/chat/completions`,
+          {
+            method: "POST",
+            headers: useRelay
+              ? {
+                  "Content-Type": "application/json",
+                  "X-Zhidaole-Relay-Token": relayToken
+                }
+              : {
+                  Authorization: `Bearer ${apiKey}`,
+                  "Content-Type": "application/json"
+                },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
+          }
+        );
         break;
       } catch (error) {
         if (!isTransientNetworkError(error) || attempt === 3) throw error;
