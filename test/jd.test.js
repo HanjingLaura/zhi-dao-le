@@ -9,6 +9,7 @@ import {
 import {
   buildModeInstruction,
   isSparseJd,
+  isTransientNetworkError,
   structureJd
 } from "../server/bailian.js";
 
@@ -156,5 +157,68 @@ test("勾选联网搜索后仅保留高置信度链接", async () => {
   } finally {
     if (previous === undefined) delete process.env.MOCK_AI;
     else process.env.MOCK_AI = previous;
+  }
+});
+
+test("识别百炼的瞬时连接错误", () => {
+  const error = new TypeError("fetch failed", {
+    cause: { code: "UND_ERR_CONNECT_TIMEOUT" }
+  });
+
+  assert.equal(isTransientNetworkError(error), true);
+  assert.equal(isTransientNetworkError(new Error("模型参数错误")), false);
+});
+
+test("百炼瞬时连接失败后自动重试", async () => {
+  const previousMock = process.env.MOCK_AI;
+  const previousKey = process.env.DASHSCOPE_API_KEY;
+  const previousFetch = globalThis.fetch;
+  let attempts = 0;
+
+  process.env.MOCK_AI = "false";
+  process.env.DASHSCOPE_API_KEY = "test-key";
+  globalThis.fetch = async () => {
+    attempts += 1;
+    if (attempts === 1) {
+      throw new TypeError("fetch failed", {
+        cause: { code: "UND_ERR_CONNECT_TIMEOUT" }
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                company: "测试科技公司",
+                role: "后端工程师",
+                locations: ["北京"],
+                summary: "负责平台开发。",
+                responsibilities: ["负责平台开发。"],
+                requirements: ["熟悉 Node.js。"],
+                bonusPoints: []
+              })
+            }
+          }
+        ]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  try {
+    const result = await structureJd({
+      rawJd: "测试科技公司招聘后端工程师，工作地点北京。",
+      mode: "faithful"
+    });
+    assert.equal(attempts, 2);
+    assert.equal(result.role, "后端工程师");
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousMock === undefined) delete process.env.MOCK_AI;
+    else process.env.MOCK_AI = previousMock;
+    if (previousKey === undefined) delete process.env.DASHSCOPE_API_KEY;
+    else process.env.DASHSCOPE_API_KEY = previousKey;
   }
 });

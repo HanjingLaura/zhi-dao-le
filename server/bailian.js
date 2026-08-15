@@ -144,6 +144,27 @@ function extractJson(content) {
   }
 }
 
+const TRANSIENT_NETWORK_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_SOCKET"
+]);
+
+export function isTransientNetworkError(error) {
+  const code = error?.cause?.code || error?.code;
+  return (
+    TRANSIENT_NETWORK_CODES.has(code) ||
+    (error?.name === "TypeError" && error?.message === "fetch failed")
+  );
+}
+
+const wait = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 async function requestBailian(
   messages,
   { enableSearch = false, validateJd = true, temperature = 0.2 } = {}
@@ -181,7 +202,7 @@ async function requestBailian(
     "https://dashscope.aliyuncs.com/compatible-mode/v1"
   ).replace(/\/$/, "");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90_000);
+  const timeout = setTimeout(() => controller.abort(), 52_000);
 
   try {
     const requestBody = {
@@ -198,15 +219,28 @@ async function requestBailian(
       };
     }
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal
-    });
+    let response;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        response = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        });
+        break;
+      } catch (error) {
+        if (!isTransientNetworkError(error) || attempt === 3) throw error;
+        console.warn("DashScope request retrying", {
+          attempt,
+          causeCode: error?.cause?.code || error?.code
+        });
+        await wait(attempt === 1 ? 350 : 850);
+      }
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -241,6 +275,13 @@ async function requestBailian(
       causeCode: error?.cause?.code,
       causeMessage: error?.cause?.message
     });
+    if (isTransientNetworkError(error)) {
+      const networkError = new Error("百炼连接暂时不稳定，请稍后重试");
+      networkError.code = "model_network_error";
+      networkError.status = 502;
+      networkError.cause = error;
+      throw networkError;
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
