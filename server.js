@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import { structureJd, reviseJd } from "./server/bailian.js";
 
 const app = express();
+const api = express.Router();
 const port = Number(process.env.PORT || 3210);
 const production = process.argv.includes("--production");
+const vercel = process.env.VERCEL === "1";
 const root = path.dirname(fileURLToPath(import.meta.url));
 
 app.disable("x-powered-by");
@@ -14,7 +16,7 @@ app.use(express.json({ limit: "256kb" }));
 
 app.get("/favicon.ico", (_request, response) => response.status(204).end());
 
-app.get("/api/health", (_request, response) => {
+api.get("/health", (_request, response) => {
   response.json({
     ok: true,
     model: process.env.DASHSCOPE_MODEL || "qwen-plus",
@@ -22,7 +24,7 @@ app.get("/api/health", (_request, response) => {
   });
 });
 
-app.post("/api/structure-jd", async (request, response) => {
+api.post("/structure-jd", async (request, response) => {
   const rawJd = String(request.body?.rawJd || "").trim();
   const mode = String(request.body?.mode || "faithful");
   if (rawJd.length < 10) {
@@ -49,7 +51,7 @@ app.post("/api/structure-jd", async (request, response) => {
   }
 });
 
-app.post("/api/revise-jd", async (request, response) => {
+api.post("/revise-jd", async (request, response) => {
   const instruction = String(request.body?.instruction || "").trim();
   if (!instruction) {
     return response.status(400).json({
@@ -74,7 +76,12 @@ app.post("/api/revise-jd", async (request, response) => {
   }
 });
 
-if (production) {
+app.use("/api", api);
+app.use("/zhidaole/api", api);
+
+if (vercel) {
+  // Vercel serves the Vite build from its CDN and invokes this app for API routes.
+} else if (production) {
   const dist = path.join(root, "dist");
   app.use(express.static(dist, { index: false, maxAge: "1h" }));
   app.get("*path", (_request, response) => {
@@ -95,6 +102,10 @@ app.use((error, _request, response, _next) => {
   response.status(500).json({ error: "服务暂时不可用", code: "server_error" });
 });
 
-app.listen(port, "127.0.0.1", () => {
-  console.log(`职到了已启动：http://127.0.0.1:${port}`);
-});
+if (!vercel) {
+  app.listen(port, "127.0.0.1", () => {
+    console.log(`职到了已启动：http://127.0.0.1:${port}`);
+  });
+}
+
+export default app;

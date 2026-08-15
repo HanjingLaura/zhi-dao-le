@@ -1,0 +1,36 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "fluid": false,
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 60,
+      "regions": ["sin1"]
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/zhidaole/api",
+      "destination": "/api/index?__zhidaole_path="
+    },
+    {
+      "source": "/zhidaole/api/:path*",
+      "destination": "/api/index?__zhidaole_path=:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index?__zhidaole_path=:path*"
+    },
+    {
+      "source": "/zhidaole",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/zhidaole/:path*",
+      "destination": "/:path*"
+    }
+  ]
+}

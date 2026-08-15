@@ -24,6 +24,17 @@ import {
 
 const HISTORY_KEY = "zhi-dao-le:history:v1";
 const MAX_HISTORY = 10;
+const APP_BASE_PATH = String(import.meta.env.VITE_APP_BASE_PATH || "").replace(
+  /\/+$/,
+  ""
+);
+
+const apiPath = (path) => {
+  const normalizedPath = String(path || "").replace(/^\/+|\/+$/g, "");
+  return APP_BASE_PATH
+    ? `${APP_BASE_PATH}/api/${normalizedPath}/`
+    : `/api/${normalizedPath}`;
+};
 
 const safeHistory = () => {
   try {
@@ -241,7 +252,7 @@ export default function App() {
     startProgress();
     try {
       const nextData = normalizeStructuredJd(
-        await postJson("/api/structure-jd", {
+        await postJson(apiPath("structure-jd"), {
           rawJd,
           mode,
           searchOfficialLink: effectiveSearchOfficialLink
@@ -270,7 +281,7 @@ export default function App() {
     startProgress();
     try {
       const nextData = normalizeStructuredJd(
-        await postJson("/api/revise-jd", {
+        await postJson(apiPath("revise-jd"), {
           current: normalizedData,
           instruction: revision,
           mode

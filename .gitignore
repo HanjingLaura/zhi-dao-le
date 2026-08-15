@@ -12,3 +12,5 @@ downloads/
 .playwright-mcp/
 output/
 /*.png
+.vercel
+.env*

@@ -234,6 +234,13 @@ async function requestBailian(
       timeoutError.code = "model_timeout";
       throw timeoutError;
     }
+    console.error("DashScope request failed", {
+      name: error?.name,
+      code: error?.code,
+      message: error?.message,
+      causeCode: error?.cause?.code,
+      causeMessage: error?.cause?.message
+    });
     throw error;
   } finally {
     clearTimeout(timeout);
