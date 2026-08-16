@@ -697,6 +697,7 @@ input:disabled {
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  aspect-ratio: auto;
   padding: 29px 34px 22px;
   overflow: hidden;
   animation: card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -750,10 +751,6 @@ input:disabled {
   min-height: 0;
   padding: 14px 0 10px;
   overflow: hidden;
-}
-
-.job-card--content-fit {
-  aspect-ratio: auto;
 }
 
 .job-card__section + .job-card__section {

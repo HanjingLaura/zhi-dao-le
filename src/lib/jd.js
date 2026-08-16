@@ -106,7 +106,7 @@ export function paginateJd(data) {
 
   const pages = [];
   let page = { sections: [], weight: 0 };
-  const firstPageBudget = 16.5;
+  const singlePageBudget = 23.5;
 
   const pushPage = () => {
     if (!page.sections.length) return;
@@ -115,7 +115,7 @@ export function paginateJd(data) {
   };
 
   for (const group of groups) {
-    for (const item of group.items) {
+    for (const [itemIndex, item] of group.items.entries()) {
       const existing = page.sections.find((section) => section.key === group.key);
       const headerCost = existing ? 0 : 0.85;
       const itemCost = 0.4 + lineWeight(item) * 0.56;
@@ -123,14 +123,19 @@ export function paginateJd(data) {
       if (
         pages.length === 0 &&
         page.sections.length &&
-        page.weight + headerCost + itemCost > firstPageBudget
+        page.weight + headerCost + itemCost > singlePageBudget
       ) {
         pushPage();
       }
 
       let section = page.sections.find((entry) => entry.key === group.key);
       if (!section) {
-        section = { key: group.key, title: group.title, items: [] };
+        section = {
+          key: group.key,
+          title: group.title,
+          items: [],
+          startIndex: itemIndex
+        };
         page.sections.push(section);
         page.weight += 0.85;
       }
