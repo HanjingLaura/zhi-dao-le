@@ -95,6 +95,58 @@ test("较长 JD 自动分页且不丢失条目", () => {
   assert.ok(pages.length > 1);
   assert.ok(pages.length <= 2);
   assert.equal(itemCount, 18);
+  const continuedSection = pages[1].sections.find(
+    (section) => section.key === "responsibilities"
+  );
+  if (continuedSection) {
+    const firstPageResponsibilities = pages[0].sections.find(
+      (section) => section.key === "responsibilities"
+    );
+    assert.equal(
+      continuedSection.startIndex,
+      firstPageResponsibilities.items.length
+    );
+  }
+});
+
+test("中等篇幅 JD 尽量保留在一张卡片", () => {
+  const pages = paginateJd({
+    company: "测试公司",
+    role: "数据平台负责人",
+    summary: "负责大型数据平台的架构演进、核心能力建设和跨团队交付。",
+    responsibilities: Array.from(
+      { length: 7 },
+      (_, index) =>
+        `负责第 ${index + 1} 项平台能力的方案设计、核心开发、稳定交付和持续优化。`
+    ),
+    requirements: Array.from(
+      { length: 6 },
+      (_, index) =>
+        `具备第 ${index + 1} 类复杂系统的开发、性能优化和线上问题排查经验。`
+    ),
+    bonusPoints: ["具有大型平台从零到一建设经验。"]
+  });
+
+  assert.equal(pages.length, 1);
+  assert.ok(pages[0].weight > 16.5);
+});
+
+test("同一栏目跨卡片时序号连续", () => {
+  const pages = paginateJd({
+    company: "测试公司",
+    role: "高级工程师",
+    responsibilities: Array.from(
+      { length: 12 },
+      (_, index) =>
+        `负责第 ${index + 1} 个复杂业务模块的架构设计、核心功能开发、性能治理、线上稳定性优化、跨团队交付以及长期技术演进，并持续推进复杂问题定位、容量规划、成本治理和多团队协作机制完善。`
+    )
+  });
+
+  assert.equal(pages.length, 2);
+  const firstSection = pages[0].sections[0];
+  const secondSection = pages[1].sections[0];
+  assert.equal(secondSection.key, "responsibilities");
+  assert.equal(secondSection.startIndex, firstSection.items.length);
 });
 
 test("常规完整 JD 优先排在一张卡片", () => {
