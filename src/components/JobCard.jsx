@@ -4,7 +4,6 @@ import { QRCodeSVG } from "qrcode.react";
 function CardSection({ section }) {
   const paragraph =
     section.key === "summary" || section.key === "companyIntroduction";
-  const startIndex = section.startIndex || 0;
 
   return (
     <section className="job-card__section">
@@ -14,8 +13,8 @@ function CardSection({ section }) {
       ) : (
         <ol className="job-card__list">
           {section.items.map((item, index) => (
-            <li key={`${section.key}-${startIndex + index}`}>
-              <span>{String(startIndex + index + 1).padStart(2, "0")}</span>
+            <li key={`${section.key}-${index}`}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
               <p>{item}</p>
             </li>
           ))}
@@ -38,9 +37,10 @@ export default function JobCard({ data, page, pageIndex }) {
       : page.weight > 14
         ? " job-card--dense"
         : "";
+  const compactClass = page.weight <= 14 ? " job-card--content-fit" : "";
 
   return (
-    <article className={`job-card${densityClass}`}>
+    <article className={`job-card${densityClass}${compactClass}`}>
       <header className="job-card__header">
         <div className="job-card__header-copy">
           <p className="job-card__company">{company}</p>
