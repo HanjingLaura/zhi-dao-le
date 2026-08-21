@@ -7,7 +7,7 @@ export const MODE_OPTIONS = [
   {
     id: "polished",
     label: "适度润色",
-    description: "适合信息较少的 JD，在原意范围内补全表达，不编造事实"
+    description: "适合只有岗位基本信息或内容较少的 JD，补充通用职责与要求"
   },
   {
     id: "confidential",

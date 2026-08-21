@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  MODE_OPTIONS,
   formatJdText,
   isMeaningfulJd,
   normalizeStructuredJd,
@@ -10,6 +11,7 @@ import {
   buildModeInstruction,
   isSparseJd,
   isTransientNetworkError,
+  sanitizePolishedJd,
   structureJd
 } from "../server/bailian.js";
 
@@ -33,7 +35,7 @@ test("按固定顺序导出岗位纯文本并省略不可信链接", () => {
   assert.match(result, /加分项：\n1\. 熟悉 Kubernetes。/);
 });
 
-test("适度润色识别极简 JD 并限制扩写边界", () => {
+test("适度润色将极简输入扩写为通用规范 JD", () => {
   const rawJd = `某搜索公司招聘爬虫专家，Base 北京。
 必须有专业爬虫或数据采集开发经验。
 要求覆盖 Web/App 多端数据获取和大型爬虫系统。
@@ -42,18 +44,59 @@ test("适度润色识别极简 JD 并限制扩写边界", () => {
 
   assert.equal(isSparseJd(rawJd), true);
   assert.match(instruction, /极简 JD/);
+  assert.match(instruction, /只有公司、岗位名称和 Base/);
+  assert.match(instruction, /依据岗位类别生成一份偏通用但完整/);
   assert.match(instruction, /“必须、需要、要求”归入 requirements/);
   assert.match(instruction, /“优先、加分、目标公司背景”归入 bonusPoints/);
-  assert.match(instruction, /不要因此只做机械复述/);
   assert.match(instruction, /使用 2-3 个完整句子/);
-  assert.match(instruction, /requirements 可以按能力域逐项拆分/);
-  assert.match(instruction, /优先生成 3-4 条高信息密度的 responsibilities/);
-  assert.match(instruction, /responsibilities 不要变成一个关键词一条的短标签/);
-  assert.match(instruction, /中性连接词让表达完整自然/);
-  assert.match(instruction, /不得新增年限、学历、薪资/);
-  assert.match(instruction, /不得写“大模型训练数据”/);
-  assert.match(instruction, /不得自行列举算法、数据、平台等团队/);
-  assert.match(instruction, /不得自动增加方案设计、实施、建设、开发、迭代、运维、落地或保障结果/);
+  assert.match(instruction, /responsibilities 通常生成 4-6 条/);
+  assert.match(instruction, /requirements 通常生成 4-7 条/);
+  assert.match(instruction, /广为人知的主营方向/);
+  assert.match(instruction, /不得新增具体年限、学历、薪资/);
+  assert.match(instruction, /禁止出现“根据原始 JD”/);
+  assert.match(instruction, /“原始 JD 中明确出现的关键词”/);
+});
+
+test("适度润色对只有岗位基本信息的输入启用通用补充", () => {
+  const instruction = buildModeInstruction(
+    "polished",
+    "光轮智能，云原生后端工程师，Base 上海"
+  );
+
+  assert.equal(isSparseJd("光轮智能，云原生后端工程师，Base 上海"), true);
+  assert.match(instruction, /通用职责和通用能力要求/);
+  assert.match(instruction, /形成完整 JD/);
+  assert.match(instruction, /不声称该公司一定采用某项技术、架构或流程/);
+  assert.equal(
+    MODE_OPTIONS.find((option) => option.id === "polished")?.description,
+    "适合只有岗位基本信息或内容较少的 JD，补充通用职责与要求"
+  );
+});
+
+test("适度润色成品移除编辑过程话术", () => {
+  const result = sanitizePolishedJd({
+    company: "光轮智能",
+    role: "云原生后端工程师",
+    locations: ["上海"],
+    summary:
+      "根据原始 JD，输入信息有限。负责后端服务的设计、开发与持续优化。",
+    responsibilities: [
+      "原始 JD 中明确出现的关键词包括后端开发。",
+      "负责核心服务的开发、维护与性能优化。"
+    ],
+    requirements: [
+      "建议补充具体年限。",
+      "具备良好的工程基础和问题分析能力。"
+    ]
+  });
+
+  assert.equal(result.summary, "负责后端服务的设计、开发与持续优化。");
+  assert.deepEqual(result.responsibilities, [
+    "负责核心服务的开发、维护与性能优化。"
+  ]);
+  assert.deepEqual(result.requirements, [
+    "具备良好的工程基础和问题分析能力。"
+  ]);
 });
 
 test("清理 Markdown 并规范化列表字段", () => {
