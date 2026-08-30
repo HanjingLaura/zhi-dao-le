@@ -127,7 +127,6 @@ export default function JobEditorDialog({
         <header>
           <div>
             <h2 id="job-editor-title">修改岗位卡片</h2>
-            <p>直接保存不会调用 AI</p>
           </div>
           <button type="button" className="icon-button" onClick={onClose} disabled={saving} aria-label="关闭">
             <X size={18} weight="bold" />
@@ -137,7 +136,6 @@ export default function JobEditorDialog({
         <div className="job-editor__body">
           <fieldset className="job-editor__group job-editor__group--private">
             <legend>岗位库内分类</legend>
-            <p>只用于当前浏览器的分类和搜索，不会出现在卡片中。</p>
             <div className="job-editor__columns">
               <label>
                 <span>公司</span>
