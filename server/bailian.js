@@ -1,4 +1,9 @@
-import { normalizeStructuredJd, isMeaningfulJd } from "../src/lib/jd.js";
+import {
+  enforceJdMode,
+  normalizeStructuredJd,
+  isMeaningfulJd,
+  publicJdData
+} from "../src/lib/jd.js";
 
 const SYSTEM_PROMPT = `你是资深猎头团队的岗位信息编辑。你的任务是把用户提供的杂乱 JD 整理成准确、清晰、适合候选人阅读的结构化信息。
 
@@ -12,9 +17,12 @@ const SYSTEM_PROMPT = `你是资深猎头团队的岗位信息编辑。你的任
 7. 只输出 JSON 对象，不要输出 Markdown 或解释。
 8. 忠实整理和保密泛化模式的 summary、responsibilities、requirements 和 bonusPoints 必须能对应到输入内容。适度润色模式可以依据岗位名称、输入中的工作方向和可靠的常识生成通用内容；公司名称本身不能用于虚构具体产品、客户、组织架构、技术方案或经营数据。
 9. 成品字段只写正式 JD 内容。禁止出现“根据原始 JD”“原始 JD 中明确出现的关键词”“输入信息有限”“未提及”“无法确认”“建议补充”“通用模板”等面向编辑或审校过程的说明。
+10. libraryCompany 和 libraryRole 只用于用户浏览器中的岗位库分类。准确提取原文中的真实公司和岗位名称；保密泛化模式也要保留真实值。它们不会出现在对外卡片和复制文案中。
 
 JSON 字段固定为：
 {
+  "libraryCompany": "",
+  "libraryRole": "",
   "company": "",
   "role": "",
   "locations": [],
@@ -121,6 +129,8 @@ ${densityNote}
 }
 
 const MOCK_RESULT = {
+  libraryCompany: "测试科技公司",
+  libraryRole: "高级后端工程师",
   company: "测试科技公司",
   role: "高级后端工程师",
   locations: ["北京", "上海"],
@@ -434,6 +444,10 @@ export async function structureJd({
     result = sanitizePolishedJd(result);
   }
 
+  if (mode === "confidential") {
+    return enforceJdMode(result, mode);
+  }
+
   if (result.companyUrl) {
     return normalizeStructuredJd({
       ...result,
@@ -459,20 +473,22 @@ export async function structureJd({
 }
 
 export async function reviseJd({ current, instruction, mode = "faithful" }) {
+  const currentPublicData = publicJdData(current);
   const modeInstruction = buildModeInstruction(
     mode,
-    JSON.stringify(normalizeStructuredJd(current))
+    JSON.stringify(currentPublicData)
   );
   const result = await requestBailian([
     { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: `${modeInstruction}\n\n下面是已经结构化的 JD：\n<current_json>\n${JSON.stringify(
-        normalizeStructuredJd(current)
-      )}\n</current_json>\n\n请根据这条修改要求调整：\n<revision>\n${String(
+      {
+        role: "user",
+        content: `${modeInstruction}\n\n下面是已经结构化的 JD：\n<current_json>\n${JSON.stringify(
+          currentPublicData
+        )}\n</current_json>\n\n请根据这条修改要求调整：\n<revision>\n${String(
         instruction || ""
       ).slice(0, 2_000)}\n</revision>\n\n返回修改后的完整 JSON。`
     }
   ]);
-  return mode === "polished" ? sanitizePolishedJd(result) : result;
+  const revised = mode === "polished" ? sanitizePolishedJd(result) : result;
+  return enforceJdMode(revised, mode);
 }
