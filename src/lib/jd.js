@@ -51,10 +51,15 @@ const listValue = (value) => {
 
 export function normalizeStructuredJd(input = {}) {
   const source = input && typeof input === "object" ? input : {};
+  const company = textValue(source.company || source.companyName);
+  const role = textValue(source.role || source.jobTitle || source.position);
   const companyUrl = textValue(source.companyUrl || source.website || source.url);
   return {
-    company: textValue(source.company || source.companyName),
-    role: textValue(source.role || source.jobTitle || source.position),
+    libraryCompany:
+      textValue(source.libraryCompany || source.internalCompany) || company,
+    libraryRole: textValue(source.libraryRole || source.internalRole) || role,
+    company,
+    role,
     locations: listValue(source.locations || source.location || source.base),
     summary: textValue(source.summary || source.roleSummary),
     responsibilities: listValue(source.responsibilities || source.duties),
@@ -76,6 +81,24 @@ export function normalizeStructuredJd(input = {}) {
     uncertainFields: listValue(source.uncertainFields),
     warnings: listValue(source.warnings)
   };
+}
+
+export function enforceJdMode(input = {}, mode = "faithful") {
+  const data = normalizeStructuredJd(input);
+  if (mode !== "confidential") return data;
+  return normalizeStructuredJd({
+    ...data,
+    company: "保密公司",
+    companyUrl: "",
+    companyUrlConfidence: "none",
+    companyUrlSource: "none",
+    companyUrlType: "none"
+  });
+}
+
+export function publicJdData(input = {}) {
+  const { libraryCompany, libraryRole, ...publicData } = normalizeStructuredJd(input);
+  return publicData;
 }
 
 const lineWeight = (text) => {

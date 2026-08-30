@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   MODE_OPTIONS,
+  enforceJdMode,
   formatJdText,
   isMeaningfulJd,
   normalizeStructuredJd,
-  paginateJd
+  paginateJd,
+  publicJdData
 } from "../src/lib/jd.js";
 import {
   buildModeInstruction,
@@ -33,6 +35,54 @@ test("按固定顺序导出岗位纯文本并省略不可信链接", () => {
   assert.match(result, /岗位职责：\n1\. 设计核心服务。\n2\. 推动项目交付。/);
   assert.match(result, /岗位要求：\n1\. 熟悉 Go。/);
   assert.match(result, /加分项：\n1\. 熟悉 Kubernetes。/);
+});
+
+test("保密岗位的库内分类名称不会进入导出文字", () => {
+  const result = formatJdText({
+    libraryCompany: "真实客户公司",
+    libraryRole: "内部项目代号岗位",
+    company: "保密科技公司",
+    role: "后端工程师",
+    locations: ["上海"],
+    summary: "负责后端平台建设。",
+    responsibilities: ["负责核心服务开发。"],
+    requirements: ["具备后端工程经验。"]
+  });
+
+  assert.equal(result.includes("真实客户公司"), false);
+  assert.equal(result.includes("内部项目代号岗位"), false);
+  assert.match(result, /公司：保密科技公司[\s\S]*岗位：后端工程师/);
+});
+
+test("发给修改接口的公开数据不包含岗位库内部分类", () => {
+  const result = publicJdData({
+    libraryCompany: "真实客户公司",
+    libraryRole: "内部项目代号岗位",
+    company: "保密公司",
+    role: "后端工程师"
+  });
+
+  assert.equal("libraryCompany" in result, false);
+  assert.equal("libraryRole" in result, false);
+  assert.equal(result.company, "保密公司");
+});
+
+test("保密模式会清除人工编辑加入的公司名和链接", () => {
+  const result = enforceJdMode(
+    {
+      libraryCompany: "真实客户公司",
+      company: "真实客户公司",
+      role: "后端工程师",
+      companyUrl: "https://example.com",
+      companyUrlConfidence: "high"
+    },
+    "confidential"
+  );
+
+  assert.equal(result.libraryCompany, "真实客户公司");
+  assert.equal(result.company, "保密公司");
+  assert.equal(result.companyUrl, "");
+  assert.equal(result.companyUrlConfidence, "none");
 });
 
 test("适度润色将极简输入扩写为通用规范 JD", () => {
@@ -249,6 +299,26 @@ test("勾选联网搜索后仅保留高置信度链接", async () => {
     assert.equal(withSearch.companyUrl, "https://example.com/");
     assert.equal(withSearch.companyUrlConfidence, "high");
     assert.equal(withSearch.companyUrlSource, "search");
+  } finally {
+    if (previous === undefined) delete process.env.MOCK_AI;
+    else process.env.MOCK_AI = previous;
+  }
+});
+
+test("保密模式确定性隐藏公司名称与原文链接", async () => {
+  const previous = process.env.MOCK_AI;
+  process.env.MOCK_AI = "true";
+  try {
+    const result = await structureJd({
+      rawJd: "测试科技公司招聘后端工程师，官网 https://example.com。",
+      mode: "confidential",
+      searchOfficialLink: true
+    });
+
+    assert.equal(result.libraryCompany, "测试科技公司");
+    assert.equal(result.company, "保密公司");
+    assert.equal(result.companyUrl, "");
+    assert.equal(result.companyUrlConfidence, "none");
   } finally {
     if (previous === undefined) delete process.env.MOCK_AI;
     else process.env.MOCK_AI = previous;

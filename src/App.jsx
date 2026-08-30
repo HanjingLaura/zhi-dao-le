@@ -1,29 +1,35 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowCounterClockwise,
+  Briefcase,
   CaretLeft,
   CaretRight,
   Check,
-  ClockCounterClockwise,
   Copy,
   DownloadSimple,
-  PaperPlaneTilt,
-  X
+  PencilSimple,
+  PaperPlaneTilt
 } from "@phosphor-icons/react";
 import { toPng } from "html-to-image";
 import DinoRunner from "./components/DinoRunner.jsx";
 import DotMatrixLoader from "./components/DotMatrixLoader.jsx";
+import JobEditorDialog from "./components/JobEditorDialog.jsx";
 import JobCard from "./components/JobCard.jsx";
+import JobLibraryDrawer from "./components/JobLibraryDrawer.jsx";
 import {
   MODE_OPTIONS,
   SAMPLE_RAW_JD,
+  enforceJdMode,
   formatJdText,
   normalizeStructuredJd,
-  paginateJd
+  paginateJd,
+  publicJdData
 } from "./lib/jd.js";
+import {
+  getBrowserJobLibrary,
+  sortLibraryJobs
+} from "./lib/job-library.js";
 
-const HISTORY_KEY = "zhi-dao-le:history:v1";
-const MAX_HISTORY = 10;
 const APP_BASE_PATH = String(import.meta.env.VITE_APP_BASE_PATH || "").replace(
   /\/+$/,
   ""
@@ -34,15 +40,6 @@ const apiPath = (path) => {
   return APP_BASE_PATH
     ? `${APP_BASE_PATH}/api/${normalizedPath}/`
     : `/api/${normalizedPath}`;
-};
-
-const safeHistory = () => {
-  try {
-    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-    return Array.isArray(value) ? value.slice(0, MAX_HISTORY) : [];
-  } catch {
-    return [];
-  }
 };
 
 const safeFilename = (value) =>
@@ -103,55 +100,9 @@ function EmptyPreview() {
   );
 }
 
-function HistoryDrawer({ open, items, onClose, onSelect, onClear }) {
-  if (!open) return null;
-  return (
-    <div className="drawer-layer" role="presentation" onMouseDown={onClose}>
-      <aside
-        className="history-drawer"
-        aria-label="历史记录"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div>
-            <h2>历史记录</h2>
-            <p>仅保存在当前浏览器</p>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="关闭">
-            <X size={18} weight="bold" />
-          </button>
-        </header>
-
-        {items.length ? (
-          <div className="history-list">
-            {items.map((item) => (
-              <button key={item.id} type="button" onClick={() => onSelect(item)}>
-                <strong>{item.data?.role || "未命名岗位"}</strong>
-                <span>{item.data?.company || "公司待确认"}</span>
-                <time>{new Date(item.createdAt).toLocaleString("zh-CN")}</time>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="history-empty">
-            <ClockCounterClockwise size={28} />
-            <p>还没有生成记录</p>
-          </div>
-        )}
-
-        {items.length ? (
-          <button type="button" className="clear-history" onClick={onClear}>
-            清空历史记录
-          </button>
-        ) : null}
-      </aside>
-    </div>
-  );
-}
-
 export default function App() {
   const [rawJd, setRawJd] = useState("");
-  const [mode, setMode] = useState("faithful");
+  const [mode, setMode] = useState("confidential");
   const [searchOfficialLink, setSearchOfficialLink] = useState(false);
   const [data, setData] = useState(null);
   const [pageIndex, setPageIndex] = useState(0);
@@ -159,12 +110,23 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState("");
-  const [history, setHistory] = useState(safeHistory);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [libraryItems, setLibraryItems] = useState([]);
+  const [libraryReady, setLibraryReady] = useState(false);
+  const [libraryAvailable, setLibraryAvailable] = useState(true);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [activeRecordId, setActiveRecordId] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingRecordId, setEditingRecordId] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const library = useMemo(() => getBrowserJobLibrary(), []);
   const progressTimer = useRef(null);
   const copyTimer = useRef(null);
+  const noticeTimer = useRef(null);
+  const noticeAction = useRef(null);
+  const operationInFlight = useRef(false);
   const exportCardRefs = useRef(new Map());
 
   const normalizedData = useMemo(
@@ -179,7 +141,8 @@ export default function App() {
   const canSearchOfficialLink = mode !== "confidential";
   const effectiveSearchOfficialLink = canSearchOfficialLink && searchOfficialLink;
   const generating = status === "generating";
-  const busy = status === "generating" || status === "revising";
+  const busy =
+    status === "checking" || status === "generating" || status === "revising";
   const processLabel =
     status === "revising"
       ? "正在修改卡片"
@@ -189,6 +152,21 @@ export default function App() {
           ? "正在整理结构"
           : "正在生成卡片";
 
+  const closeLibrary = useCallback(() => setLibraryOpen(false), []);
+  const closeEditor = useCallback(() => {
+    setEditorOpen(false);
+    setEditingRecordId(null);
+  }, []);
+  const invalidateCurrentCard = useCallback(() => {
+    setData(null);
+    setActiveRecordId(null);
+    setPageIndex(0);
+    setRevision("");
+    setStatus("idle");
+    setProgress(0);
+    setError("");
+  }, []);
+
   useEffect(() => {
     if (pageIndex >= pages.length) setPageIndex(Math.max(0, pages.length - 1));
   }, [pageIndex, pages.length]);
@@ -197,6 +175,7 @@ export default function App() {
     () => () => {
       if (progressTimer.current) clearInterval(progressTimer.current);
       if (copyTimer.current) clearTimeout(copyTimer.current);
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
     },
     []
   );
@@ -221,47 +200,141 @@ export default function App() {
     setProgress(100);
   }, []);
 
-  const persistHistory = useCallback(
-    (nextData) => {
-      const item = {
-        id: `${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        rawJd,
-        mode,
-        searchOfficialLink: effectiveSearchOfficialLink,
-        data: nextData
-      };
-      setHistory((current) => {
-        const next = [item, ...current].slice(0, MAX_HISTORY);
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-        return next;
-      });
+  const showNotice = useCallback(
+    (message, { actionLabel = "", action = null, duration = 4200 } = {}) => {
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+      noticeAction.current = action;
+      setNotice({ message, actionLabel });
+      noticeTimer.current = setTimeout(() => {
+        setNotice(null);
+        noticeAction.current = null;
+        noticeTimer.current = null;
+      }, duration);
     },
-    [effectiveSearchOfficialLink, mode, rawJd]
+    []
   );
 
-  const generate = async () => {
-    if (busy) return;
-    if (rawJd.trim().length < 10) {
+  const refreshLibrary = useCallback(async () => {
+    const items = await library.list();
+    setLibraryItems(items);
+    return items;
+  }, [library]);
+
+  const upsertLibraryItem = useCallback((record) => {
+    if (!record) return;
+    setLibraryItems((current) =>
+      sortLibraryJobs([record, ...current.filter((item) => item.id !== record.id)])
+    );
+  }, []);
+
+  const openLibrary = useCallback(() => {
+    setLibraryOpen(true);
+    refreshLibrary().catch(() => {
+      showNotice("岗位库列表暂时无法刷新");
+    });
+  }, [refreshLibrary, showNotice]);
+
+  useEffect(() => {
+    let cancelled = false;
+    library
+      .migrateLegacy()
+      .then((items) => {
+        if (!cancelled) setLibraryItems(items);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLibraryAvailable(false);
+          showNotice("当前浏览器无法启用岗位库，仍可正常生成卡片");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLibraryReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [library, showNotice]);
+
+  const activateLibraryRecord = useCallback((item) => {
+    const recordMode = item.mode || "confidential";
+    setRawJd(item.rawJd || "");
+    setMode(recordMode);
+    setSearchOfficialLink(
+      recordMode !== "confidential" && Boolean(item.searchOfficialLink)
+    );
+    setData(enforceJdMode(item.data, recordMode));
+    setActiveRecordId(item.id);
+    setPageIndex(0);
+    setStatus("ready");
+    setProgress(0);
+    setError("");
+  }, []);
+
+  const saveGeneratedRecord = useCallback(
+    async (nextData, input) => {
+      if (!libraryAvailable) return null;
+      try {
+        const record = await library.saveGenerated({ ...input, data: nextData });
+        setActiveRecordId(record.id);
+        upsertLibraryItem(record);
+        return record;
+      } catch {
+        setLibraryAvailable(false);
+        showNotice("卡片已生成，但当前浏览器无法保存岗位库");
+        return null;
+      }
+    },
+    [library, libraryAvailable, showNotice, upsertLibraryItem]
+  );
+
+  const generate = async ({ skipCache = false } = {}) => {
+    if (operationInFlight.current) return;
+    const input = {
+      rawJd: rawJd.trim(),
+      mode,
+      searchOfficialLink: effectiveSearchOfficialLink
+    };
+    if (input.rawJd.length < 10) {
       setError("请先粘贴一段完整的岗位信息");
       return;
     }
 
+    operationInFlight.current = true;
     setError("");
+    setStatus("checking");
+
+    if (!skipCache && libraryReady && libraryAvailable) {
+      try {
+        const cached = await library.findExact(input);
+        if (cached) {
+          const touched = (await library.touch(cached.id)) || cached;
+          activateLibraryRecord(touched);
+          upsertLibraryItem(touched);
+          showNotice("已从岗位库取回，没有重复调用 AI", {
+            actionLabel: "重新生成",
+            action: () => generate({ skipCache: true }),
+            duration: 5600
+          });
+          operationInFlight.current = false;
+          return;
+        }
+      } catch {
+        setLibraryAvailable(false);
+      }
+    }
+
     setStatus("generating");
     startProgress();
     try {
-      const nextData = normalizeStructuredJd(
-        await postJson(apiPath("structure-jd"), {
-          rawJd,
-          mode,
-          searchOfficialLink: effectiveSearchOfficialLink
-        })
+      const nextData = enforceJdMode(
+        await postJson(apiPath("structure-jd"), input),
+        input.mode
       );
       finishProgress();
       setData(nextData);
       setPageIndex(0);
-      persistHistory(nextData);
+      const savedRecord = await saveGeneratedRecord(nextData, input);
+      if (savedRecord) showNotice("已保存到岗位库");
       setTimeout(() => setStatus("ready"), 260);
     } catch (requestError) {
       finishProgress();
@@ -271,32 +344,67 @@ export default function App() {
           ? "尚未配置百炼 API Key，请先填写项目根目录下的 .env"
           : requestError.message
       );
+    } finally {
+      operationInFlight.current = false;
     }
   };
 
   const revise = async () => {
-    if (!normalizedData || !revision.trim() || busy) return;
+    if (
+      !normalizedData ||
+      !revision.trim() ||
+      operationInFlight.current
+    )
+      return;
+    operationInFlight.current = true;
     setError("");
     setStatus("revising");
     startProgress();
     try {
-      const nextData = normalizeStructuredJd(
+      const revisedData = normalizeStructuredJd(
         await postJson(apiPath("revise-jd"), {
-          current: normalizedData,
+          current: publicJdData(normalizedData),
           instruction: revision,
           mode
         })
+      );
+      const nextData = enforceJdMode(
+        {
+          ...revisedData,
+          libraryCompany: normalizedData.libraryCompany,
+          libraryRole: normalizedData.libraryRole
+        },
+        mode
       );
       finishProgress();
       setData(nextData);
       setPageIndex(0);
       setRevision("");
-      persistHistory(nextData);
+      if (libraryAvailable) {
+        try {
+          const record = activeRecordId
+            ? await library.update(activeRecordId, { data: nextData })
+            : await library.saveGenerated({
+                rawJd,
+                mode,
+                searchOfficialLink: effectiveSearchOfficialLink,
+                data: nextData
+              });
+          setActiveRecordId(record.id);
+          upsertLibraryItem(record);
+          showNotice("修改已保存到岗位库");
+        } catch {
+          setLibraryAvailable(false);
+          showNotice("卡片已修改，但当前浏览器无法保存岗位库");
+        }
+      }
       setTimeout(() => setStatus("ready"), 260);
     } catch (requestError) {
       finishProgress();
       setStatus("ready");
       setError(requestError.message);
+    } finally {
+      operationInFlight.current = false;
     }
   };
 
@@ -369,23 +477,98 @@ export default function App() {
     }
   };
 
-  const loadHistory = (item) => {
-    const historyMode = item.mode || "faithful";
-    setRawJd(item.rawJd || "");
-    setMode(historyMode);
-    setSearchOfficialLink(
-      historyMode !== "confidential" && Boolean(item.searchOfficialLink)
-    );
-    setData(normalizeStructuredJd(item.data));
+  const loadLibraryItem = async (item) => {
+    activateLibraryRecord(item);
+    setLibraryOpen(false);
+    try {
+      const touched = await library.touch(item.id);
+      upsertLibraryItem(touched);
+    } catch {
+      showNotice("岗位已打开，但最近访问时间未能保存");
+    }
+  };
+
+  const editLibraryItem = (item) => {
+    activateLibraryRecord(item);
+    setEditingRecordId(item.id);
+    setLibraryOpen(false);
+    setEditorOpen(true);
+  };
+
+  const openCurrentEditor = () => {
+    if (!normalizedData) return;
+    setEditingRecordId(activeRecordId);
+    setEditorOpen(true);
+  };
+
+  const saveDirectEdit = async (nextData) => {
+    const safeNextData = enforceJdMode(nextData, mode);
+    setSavingEdit(true);
+    setData(safeNextData);
     setPageIndex(0);
-    setStatus("ready");
-    setError("");
-    setHistoryOpen(false);
+    try {
+      if (!libraryAvailable) throw new Error("storage_unavailable");
+      const record = editingRecordId
+        ? await library.update(editingRecordId, { data: safeNextData })
+        : await library.saveGenerated({
+            rawJd,
+            mode,
+            searchOfficialLink: effectiveSearchOfficialLink,
+            data: safeNextData
+          });
+      setActiveRecordId(record.id);
+      upsertLibraryItem(record);
+      setEditorOpen(false);
+      setEditingRecordId(null);
+      showNotice("修改已保存，不需要重新调用 AI");
+    } catch {
+      setEditorOpen(false);
+      setEditingRecordId(null);
+      showNotice("当前卡片已修改，但岗位库未能保存");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deleteLibraryItem = async (item) => {
+    try {
+      const removed = await library.remove(item.id);
+      setLibraryItems((current) => current.filter((record) => record.id !== item.id));
+      if (activeRecordId === item.id) {
+        setData(null);
+        setRawJd("");
+        setActiveRecordId(null);
+        setStatus("idle");
+        setPageIndex(0);
+      }
+      if (removed) {
+        showNotice("已从岗位库删除", {
+          actionLabel: "撤销",
+          action: async () => {
+            try {
+              await library.put(removed);
+              upsertLibraryItem(removed);
+              showNotice("已恢复到岗位库");
+            } catch {
+              setError("恢复失败，请重新生成该岗位");
+            }
+          },
+          duration: 15000
+        });
+      }
+    } catch {
+      setError("删除失败，请重试");
+    }
   };
 
   const reset = () => {
     setRawJd("");
+    setMode("confidential");
+    setSearchOfficialLink(false);
     setData(null);
+    setActiveRecordId(null);
+    setEditingRecordId(null);
+    setEditorOpen(false);
     setRevision("");
     setStatus("idle");
     setProgress(0);
@@ -395,7 +578,10 @@ export default function App() {
 
   return (
     <div className="app-frame">
-      <main className="workspace">
+      <main
+        className="workspace"
+        inert={libraryOpen || editorOpen ? true : undefined}
+      >
         <section className="editor-panel" aria-labelledby="editor-title">
           <div className="panel-heading">
             <div>
@@ -403,15 +589,25 @@ export default function App() {
             </div>
             <div className="panel-utilities">
               {data ? (
-                <button type="button" className="text-button" onClick={reset}>
+                <button
+                  type="button"
+                  className="text-button new-button"
+                  onClick={reset}
+                  disabled={busy}
+                >
                   <ArrowCounterClockwise size={16} />
                   新建
                 </button>
               ) : null}
-              <button type="button" className="text-button" onClick={() => setHistoryOpen(true)}>
-                <ClockCounterClockwise size={17} />
-                历史记录
-                {history.length ? <span className="history-count">{history.length}</span> : null}
+              <button
+                type="button"
+                className="text-button library-button"
+                onClick={openLibrary}
+                disabled={busy}
+              >
+                <Briefcase size={17} />
+                岗位库
+                {libraryItems.length ? <span className="library-count">{libraryItems.length}</span> : null}
               </button>
             </div>
           </div>
@@ -425,7 +621,7 @@ export default function App() {
               className="sample-button"
               onClick={() => {
                 setRawJd(SAMPLE_RAW_JD);
-                setError("");
+                invalidateCurrentCard();
               }}
               disabled={busy}
             >
@@ -436,7 +632,10 @@ export default function App() {
             <textarea
               id="raw-jd"
               value={rawJd}
-              onChange={(event) => setRawJd(event.target.value)}
+              onChange={(event) => {
+                setRawJd(event.target.value);
+                invalidateCurrentCard();
+              }}
               placeholder="可以很乱，直接粘贴即可。支持公司介绍、岗位职责、任职要求、Base 和相关链接。"
               maxLength={30000}
               disabled={busy}
@@ -459,6 +658,7 @@ export default function App() {
                     checked={mode === option.id}
                     onChange={() => {
                       setMode(option.id);
+                      invalidateCurrentCard();
                       if (option.id === "confidential") setSearchOfficialLink(false);
                     }}
                   />
@@ -473,7 +673,10 @@ export default function App() {
                 <input
                   type="checkbox"
                   checked={searchOfficialLink}
-                  onChange={(event) => setSearchOfficialLink(event.target.checked)}
+                  onChange={(event) => {
+                    setSearchOfficialLink(event.target.checked);
+                    invalidateCurrentCard();
+                  }}
                 />
                 <span>
                   <strong>联网搜索官网或相关链接</strong>
@@ -487,13 +690,15 @@ export default function App() {
             <DinoRunner active={generating} />
             <button
               type="button"
-              className={`primary-action${generating ? " is-processing" : ""}`}
-              onClick={generate}
+              className={`primary-action${generating || status === "checking" ? " is-processing" : ""}`}
+              onClick={() => generate()}
               disabled={busy || rawJd.trim().length < 10}
               aria-label={
                 generating
                   ? `${processLabel}，${Math.round(progress)}%`
-                  : "整理并生成卡片"
+                  : status === "checking"
+                    ? "正在查询岗位库"
+                    : "整理并生成卡片"
               }
             >
               <span
@@ -512,6 +717,8 @@ export default function App() {
                     </span>
                     <span className="sr-only">{processLabel}</span>
                   </>
+                ) : status === "checking" ? (
+                  <>正在查询岗位库</>
                 ) : (
                   <>整理并生成卡片</>
                 )}
@@ -596,6 +803,16 @@ export default function App() {
             <div className="download-actions">
               <button
                 type="button"
+                className="secondary-icon-action"
+                onClick={openCurrentEditor}
+                disabled={!normalizedData || busy}
+                aria-label="直接修改卡片内容"
+                title="直接修改卡片内容"
+              >
+                <PencilSimple size={20} />
+              </button>
+              <button
+                type="button"
                 onClick={downloadAll}
                 disabled={!normalizedData || downloading}
                 aria-label={downloading ? "正在生成全部图片" : "下载全部图片"}
@@ -647,16 +864,44 @@ export default function App() {
         </div>
       ) : null}
 
-      <HistoryDrawer
-        open={historyOpen}
-        items={history}
-        onClose={() => setHistoryOpen(false)}
-        onSelect={loadHistory}
-        onClear={() => {
-          localStorage.removeItem(HISTORY_KEY);
-          setHistory([]);
-        }}
+      <JobLibraryDrawer
+        open={libraryOpen}
+        items={libraryItems}
+        onClose={closeLibrary}
+        onSelect={loadLibraryItem}
+        onEdit={editLibraryItem}
+        onDelete={deleteLibraryItem}
       />
+
+      <JobEditorDialog
+        open={editorOpen}
+        data={normalizedData}
+        mode={mode}
+        saving={savingEdit}
+        onClose={closeEditor}
+        onSave={saveDirectEdit}
+      />
+
+      {notice ? (
+        <div className="app-notice" role="status">
+          <span>{notice.message}</span>
+          {notice.actionLabel ? (
+            <button
+              type="button"
+              onClick={() => {
+                const action = noticeAction.current;
+                if (noticeTimer.current) clearTimeout(noticeTimer.current);
+                noticeTimer.current = null;
+                noticeAction.current = null;
+                setNotice(null);
+                action?.();
+              }}
+            >
+              {notice.actionLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
