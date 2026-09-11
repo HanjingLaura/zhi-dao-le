@@ -165,6 +165,7 @@ export default function App() {
     setActiveRecordId(null);
     setPageIndex(0);
     setRevision("");
+    setRevisionHistory([]);
     setStatus("idle");
     setProgress(0);
     setError("");
@@ -268,6 +269,7 @@ export default function App() {
     setData(enforceJdMode(item.data, recordMode));
     setActiveRecordId(item.id);
     setPageIndex(0);
+    setRevisionHistory([]);
     setStatus("ready");
     setProgress(0);
     setError("");
@@ -893,8 +895,7 @@ export default function App() {
                   <DownloadSimple size={20} weight="bold" />
                 )}
               </button>
-              <button type="button" onClick={downloadAll} disabled={!normalizedData || downloading} title="微信尺寸（1080px）">微信尺寸</button>
-              <button type="button" onClick={downloadCurrent} disabled={!normalizedData || downloading} title="下载当前页">当前页</button>
+              <button type="button" onClick={downloadCurrent} disabled={!normalizedData || downloading} title="下载当前页 PNG">当前页</button>
               <button type="button" onClick={downloadPdf} disabled={!normalizedData || downloading} title="下载 PDF">PDF</button>
               <button
                 type="button"
@@ -946,7 +947,7 @@ export default function App() {
         onImported={async (result) => {
           if (result?.error) { showNotice("导入失败，请检查 JSON 文件"); return; }
           await refreshLibrary();
-          showNotice(`导入完成：新增 ${result.imported} 个岗位`);
+          showNotice(`导入完成：写入 ${result.imported} 个，跳过 ${result.skipped} 个`);
         }}
       />
 
