@@ -885,7 +885,7 @@ export default function App() {
                 onClick={downloadAll}
                 disabled={!normalizedData || downloading}
                 aria-label={downloading ? "正在生成全部图片" : "下载全部图片"}
-                title={downloading ? "正在生成全部图片" : "下载全部图片"}
+                title={downloading ? "正在生成全部图片" : "全部（PNG）"}
               >
                 {downloading ? (
                   <span className="mini-loader" aria-hidden="true" />
@@ -893,6 +893,7 @@ export default function App() {
                   <DownloadSimple size={20} weight="bold" />
                 )}
               </button>
+              <button type="button" onClick={downloadAll} disabled={!normalizedData || downloading} title="微信尺寸（1080px）">微信尺寸</button>
               <button type="button" onClick={downloadCurrent} disabled={!normalizedData || downloading} title="下载当前页">当前页</button>
               <button type="button" onClick={downloadPdf} disabled={!normalizedData || downloading} title="下载 PDF">PDF</button>
               <button
