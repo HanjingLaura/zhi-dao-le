@@ -7,6 +7,33 @@ export const JOB_LIBRARY_DB_NAME = "zhi-dao-le-job-library";
 export const LEGACY_HISTORY_KEY = "zhi-dao-le:history:v1";
 export const LEGACY_MIGRATION_KEY = "zhi-dao-le:history-migrated:v2";
 export const JOB_FINGERPRINT_VERSION = 1;
+export const JOB_LIBRARY_EXPORT_VERSION = 1;
+
+export function serializeJobLibrary(records, { exportedAt = new Date().toISOString() } = {}) {
+  return JSON.stringify({ version: JOB_LIBRARY_EXPORT_VERSION, exportedAt, jobs: (records || []).map((record) => ({
+    id: record.id, createdAt: record.createdAt, updatedAt: record.updatedAt, lastOpenedAt: record.lastOpenedAt,
+    revision: record.revision, rawJd: record.rawJd, mode: record.mode, searchOfficialLink: record.searchOfficialLink,
+    data: record.data, fingerprint: record.fingerprint
+  })) }, null, 2);
+}
+
+export function parseJobLibraryExport(input) {
+  let payload;
+  try { payload = typeof input === "string" ? JSON.parse(input) : input; } catch { throw new Error("invalid_json"); }
+  if (!payload || !Array.isArray(payload.jobs)) throw new Error("invalid_export");
+  return payload.jobs.filter((job) => job && typeof job === "object" && String(job.rawJd || "").trim());
+}
+
+export async function mergeJobLibraryRecords(library, records) {
+  let imported = 0, skipped = 0;
+  for (const item of records || []) {
+    const normalized = await normalizeRecord(item);
+    const existing = normalized.fingerprint ? await library.findExact(normalized) : await library.get(normalized.id);
+    if (existing && existing.updatedAt >= normalized.updatedAt) { skipped += 1; continue; }
+    await library.put(normalized); imported += 1;
+  }
+  return { imported, skipped };
+}
 
 const STORE_NAME = "jobs";
 const DB_VERSION = 1;
