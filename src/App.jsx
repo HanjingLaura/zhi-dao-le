@@ -869,6 +869,7 @@ export default function App() {
               </button>
             </div>
             <div className="download-actions">
+              {revisionHistory.length ? <button type="button" onClick={undoRevision} disabled={busy} title="撤销上一版">撤销 ({revisionHistory.length})</button> : null}
               <button
                 type="button"
                 className="secondary-icon-action"
@@ -892,6 +893,8 @@ export default function App() {
                   <DownloadSimple size={20} weight="bold" />
                 )}
               </button>
+              <button type="button" onClick={downloadCurrent} disabled={!normalizedData || downloading} title="下载当前页">当前页</button>
+              <button type="button" onClick={downloadPdf} disabled={!normalizedData || downloading} title="下载 PDF">PDF</button>
               <button
                 type="button"
                 className={`copy-action${copied ? " is-copied" : ""}`}
@@ -939,6 +942,11 @@ export default function App() {
         onSelect={loadLibraryItem}
         onEdit={editLibraryItem}
         onDelete={deleteLibraryItem}
+        onImported={async (result) => {
+          if (result?.error) { showNotice("导入失败，请检查 JSON 文件"); return; }
+          await refreshLibrary();
+          showNotice(`导入完成：新增 ${result.imported} 个岗位`);
+        }}
       />
 
       <JobEditorDialog
