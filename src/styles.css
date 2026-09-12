@@ -947,9 +947,6 @@ input:disabled {
   background: rgb(247 247 245 / 0.88);
   opacity: 0.56;
 }
-.revision-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.undo-action { border: 0; background: transparent; color: #777; font-size: 11px; padding: 6px 2px; cursor: pointer; white-space: nowrap; }
-.undo-action:hover:not(:disabled) { color: var(--ink); }
 
 .preview-actions.is-visible {
   opacity: 1;
@@ -1066,11 +1063,6 @@ input:disabled {
 .download-actions button:disabled {
   opacity: 0.48;
 }
-.export-menu-wrap { position: relative; }
-.export-menu-trigger { width: 34px !important; height: 34px !important; border-radius: 9px !important; background: #fff !important; color: var(--ink) !important; border-color: #d2d2d7 !important; }
-.export-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 120px; padding: 4px; border: 1px solid #d2d2d7; border-radius: 10px; background: #fff; box-shadow: 0 8px 20px rgb(0 0 0 / 0.12); }
-.export-menu button { width: 100% !important; height: 32px !important; justify-content: flex-start !important; padding: 0 10px !important; border: 0 !important; border-radius: 7px !important; background: transparent !important; color: var(--ink) !important; font-size: 12px; }
-.export-menu button:hover:not(:disabled) { background: var(--progress-track) !important; }
 
 .drawer-layer {
   position: fixed;

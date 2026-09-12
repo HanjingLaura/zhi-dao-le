@@ -6,7 +6,6 @@ import {
   CaretRight,
   Check,
   Copy,
-  CaretDown,
   DownloadSimple,
   PencilSimple,
   PaperPlaneTilt
@@ -125,7 +124,6 @@ export default function App() {
   const [batchProgress, setBatchProgress] = useState(null);
   const batchCancelRef = useRef(false);
   const [revisionHistory, setRevisionHistory] = useState([]);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const library = useMemo(() => getBrowserJobLibrary(), []);
   const progressTimer = useRef(null);
   const copyTimer = useRef(null);
@@ -845,8 +843,7 @@ export default function App() {
           </div>
 
           <div className={`preview-actions${normalizedData ? " is-visible" : ""}`}>
-            <div className="revision-controls">
-              <div className="revision-box">
+            <div className="revision-box">
               <textarea
                 value={revision}
                 onChange={(event) => setRevision(event.target.value)}
@@ -872,10 +869,9 @@ export default function App() {
                   <PaperPlaneTilt size={18} weight="fill" />
                 )}
               </button>
-              </div>
-              {revisionHistory.length ? <button className="undo-action" type="button" onClick={undoRevision} disabled={busy} title="撤销上一版">撤销 ({revisionHistory.length})</button> : null}
             </div>
             <div className="download-actions">
+              {revisionHistory.length ? <button type="button" onClick={undoRevision} disabled={busy} title="撤销上一版">撤销 ({revisionHistory.length})</button> : null}
               <button
                 type="button"
                 className="secondary-icon-action"
@@ -899,15 +895,8 @@ export default function App() {
                   <DownloadSimple size={20} weight="bold" />
                 )}
               </button>
-              <div className="export-menu-wrap">
-                <button type="button" className="export-menu-trigger" onClick={() => setExportMenuOpen((open) => !open)} disabled={!normalizedData || downloading} aria-label="更多下载选项" aria-expanded={exportMenuOpen}>
-                  <CaretDown size={16} weight="bold" />
-                </button>
-                {exportMenuOpen ? <div className="export-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { downloadCurrent(); setExportMenuOpen(false); }} disabled={downloading}>下载当前页</button>
-                  <button type="button" role="menuitem" onClick={() => { downloadPdf(); setExportMenuOpen(false); }} disabled={downloading}>下载 PDF</button>
-                </div> : null}
-              </div>
+              <button type="button" onClick={downloadCurrent} disabled={!normalizedData || downloading} title="下载当前页 PNG">当前页</button>
+              <button type="button" onClick={downloadPdf} disabled={!normalizedData || downloading} title="下载 PDF">PDF</button>
               <button
                 type="button"
                 className={`copy-action${copied ? " is-copied" : ""}`}
