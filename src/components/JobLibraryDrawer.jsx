@@ -8,7 +8,11 @@ import {
 } from "@phosphor-icons/react";
 import {
   groupLibraryJobs,
-  searchLibraryJobs
+  searchLibraryJobs,
+  serializeJobLibrary,
+  parseJobLibraryExport,
+  mergeJobLibraryRecords,
+  getBrowserJobLibrary
 } from "../lib/job-library.js";
 
 const MODE_LABELS = {
@@ -35,7 +39,20 @@ export default function JobLibraryDrawer({
   onSelect,
   onEdit,
   onDelete
+  ,onImported
 }) {
+  const fileRef = useRef(null);
+  const exportJobs = () => {
+    const blob = new Blob([serializeJobLibrary(items)], { type: "application/json" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a");
+    a.href = url; a.download = `zhi-dao-le-job-library-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
+  };
+  const importJobs = async (event) => {
+    const file = event.target.files?.[0]; if (!file) return;
+    try { const records = parseJobLibraryExport(await file.text()); const result = await mergeJobLibraryRecords(getBrowserJobLibrary(), records); onImported?.(result); }
+    catch { onImported?.({ error: true }); }
+    event.target.value = "";
+  };
   const [query, setQuery] = useState("");
   const searchRef = useRef(null);
   const drawerRef = useRef(null);
@@ -93,6 +110,11 @@ export default function JobLibraryDrawer({
           <div>
             <h2 id="job-library-title">岗位库</h2>
             <p>{items.length} 个岗位，仅保存在当前浏览器</p>
+            <div className="library-transfer">
+              <button type="button" onClick={exportJobs}>导出 JSON</button>
+              <button type="button" onClick={() => fileRef.current?.click()}>导入 JSON</button>
+              <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={importJobs} />
+            </div>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="关闭">
             <X size={18} weight="bold" />

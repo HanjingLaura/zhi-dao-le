@@ -697,7 +697,8 @@ input:disabled {
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  aspect-ratio: auto;
+  /* Keep preview and export cards on the same fixed 3:4 canvas. */
+  aspect-ratio: 3 / 4;
   padding: 29px 34px 22px;
   overflow: hidden;
   animation: card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1689,4 +1690,33 @@ input:disabled {
   .dino-runner__obstacle {
     right: 24px;
   }
+}
+
+
+.library-transfer {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.library-transfer button {
+  appearance: none;
+  border: 1px solid #d4d4d4;
+  background: #fff;
+  color: #171717;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.library-transfer button:hover {
+  border-color: #171717;
+}
+
+.batch-progress {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #525252;
 }

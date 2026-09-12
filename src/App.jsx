@@ -121,6 +121,9 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(null);
+  const batchCancelRef = useRef(false);
+  const [revisionHistory, setRevisionHistory] = useState([]);
   const library = useMemo(() => getBrowserJobLibrary(), []);
   const progressTimer = useRef(null);
   const copyTimer = useRef(null);
@@ -142,7 +145,7 @@ export default function App() {
   const effectiveSearchOfficialLink = canSearchOfficialLink && searchOfficialLink;
   const generating = status === "generating";
   const busy =
-    status === "checking" || status === "generating" || status === "revising";
+    status === "checking" || status === "generating" || status === "revising" || Boolean(batchProgress);
   const processLabel =
     status === "revising"
       ? "正在修改卡片"
@@ -162,6 +165,7 @@ export default function App() {
     setActiveRecordId(null);
     setPageIndex(0);
     setRevision("");
+    setRevisionHistory([]);
     setStatus("idle");
     setProgress(0);
     setError("");
@@ -265,6 +269,7 @@ export default function App() {
     setData(enforceJdMode(item.data, recordMode));
     setActiveRecordId(item.id);
     setPageIndex(0);
+    setRevisionHistory([]);
     setStatus("ready");
     setProgress(0);
     setError("");
@@ -287,8 +292,33 @@ export default function App() {
     [library, libraryAvailable, showNotice, upsertLibraryItem]
   );
 
+  const generateBatch = async (parts) => {
+    if (operationInFlight.current) return;
+    operationInFlight.current = true;
+    batchCancelRef.current = false;
+    setBatchProgress({ current: 0, total: parts.length, success: 0, failed: 0 });
+    setError("");
+    let success = 0, failed = 0, lastData = null;
+    for (let i = 0; i < parts.length; i += 1) {
+      if (batchCancelRef.current) break;
+      const input = { rawJd: parts[i].trim(), mode, searchOfficialLink: effectiveSearchOfficialLink };
+      setBatchProgress({ current: i + 1, total: parts.length, success, failed });
+      try {
+        const nextData = enforceJdMode(await postJson(apiPath("structure-jd"), input), mode);
+        await saveGeneratedRecord(nextData, input);
+        success += 1; lastData = nextData;
+      } catch { failed += 1; }
+      setBatchProgress({ current: i + 1, total: parts.length, success, failed });
+    }
+    if (lastData) { setData(lastData); setPageIndex(0); setStatus("ready"); }
+    setBatchProgress(null); operationInFlight.current = false;
+    showNotice(`批量生成完成：成功 ${success} 份，失败 ${failed} 份${batchCancelRef.current ? "（已取消）" : ""}`);
+  };
+
   const generate = async ({ skipCache = false } = {}) => {
     if (operationInFlight.current) return;
+    const batchParts = rawJd.split(/^[ \t]*---[ \t]*$/m).map((part) => part.trim()).filter(Boolean);
+    if (batchParts.length > 1 && !skipCache) { generateBatch(batchParts); return; }
     const input = {
       rawJd: rawJd.trim(),
       mode,
@@ -332,6 +362,7 @@ export default function App() {
       );
       finishProgress();
       setData(nextData);
+      setRevisionHistory([]);
       setPageIndex(0);
       const savedRecord = await saveGeneratedRecord(nextData, input);
       if (savedRecord) showNotice("已保存到岗位库");
@@ -347,6 +378,21 @@ export default function App() {
     } finally {
       operationInFlight.current = false;
     }
+  };
+
+  const undoRevision = async () => {
+    if (!revisionHistory.length || !normalizedData) return;
+    const previous = revisionHistory[revisionHistory.length - 1];
+    setRevisionHistory((history) => history.slice(0, -1));
+    setData(previous);
+    setPageIndex(0);
+    if (activeRecordId && libraryAvailable) {
+      try {
+        const record = await library.update(activeRecordId, { data: previous });
+        upsertLibraryItem(record);
+      } catch {}
+    }
+    showNotice("已撤销到上一版");
   };
 
   const revise = async () => {
@@ -378,6 +424,7 @@ export default function App() {
       );
       finishProgress();
       setData(nextData);
+      setRevisionHistory((history) => [...history, normalizedData].slice(-20));
       setPageIndex(0);
       setRevision("");
       if (libraryAvailable) {
@@ -459,6 +506,27 @@ export default function App() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  const downloadCurrent = async () => {
+    if (!pages.length || downloading) return;
+    setDownloading(true); setError("");
+    try {
+      const url = await renderCardImage(exportCardRefs.current.get(pageIndex));
+      saveDownload(url, `${safeFilename(normalizedData.role)}-${pageIndex + 1}.png`);
+    } catch { setError("当前卡片生成失败，请重试"); }
+    finally { setDownloading(false); }
+  };
+
+  const downloadPdf = () => {
+    if (!normalizedData) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.write(`<html><head><title>${safeFilename(normalizedData.role)}</title><style>body{margin:0} .page{page-break-after:always} img{width:100%;display:block}</style></head><body>`);
+    Promise.all(pages.map((_, i) => renderCardImage(exportCardRefs.current.get(i)))).then((urls) => {
+      printWindow.document.body.innerHTML = urls.map((u) => `<div class="page"><img src="${u}"/></div>`).join("");
+      printWindow.document.close(); printWindow.focus(); printWindow.print();
+    });
   };
 
   const copyTextExport = async () => {
@@ -636,7 +704,7 @@ export default function App() {
                 setRawJd(event.target.value);
                 invalidateCurrentCard();
               }}
-              placeholder="可以很乱，直接粘贴即可。支持公司介绍、岗位职责、任职要求、Base 和相关链接。"
+              placeholder="可以很乱，直接粘贴即可。支持公司介绍、岗位职责、任职要求、Base 和相关链接。多份岗位请用单独一行 --- 分隔。"
               maxLength={30000}
               disabled={busy}
             />
@@ -685,6 +753,8 @@ export default function App() {
               </label>
             ) : null}
           </fieldset>
+
+          {batchProgress ? <p className="batch-progress">第 {batchProgress.current}/{batchProgress.total} 份 · 成功 {batchProgress.success} · 失败 {batchProgress.failed} <button type="button" className="text-button" onClick={() => { batchCancelRef.current = true; }}>取消</button></p> : null}
 
           <div className={`generate-zone${generating ? " is-playing" : ""}`}>
             <DinoRunner active={generating} />
@@ -871,6 +941,11 @@ export default function App() {
         onSelect={loadLibraryItem}
         onEdit={editLibraryItem}
         onDelete={deleteLibraryItem}
+        onImported={async (result) => {
+          if (result?.error) { showNotice("导入失败，请检查 JSON 文件"); return; }
+          await refreshLibrary();
+          showNotice(`导入完成：写入 ${result.imported} 个，跳过 ${result.skipped} 个`);
+        }}
       />
 
       <JobEditorDialog
