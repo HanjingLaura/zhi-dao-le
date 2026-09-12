@@ -1604,6 +1604,28 @@ input:disabled {
   }
 }
 
+@media (max-width: 640px) {
+  .preview-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .revision-box {
+    min-width: 0;
+  }
+
+  .download-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .download-actions button {
+    flex: 0 0 48px;
+  }
+}
+
 @media (max-width: 560px) {
   .text-button > svg,
   .new-button {
