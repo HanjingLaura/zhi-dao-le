@@ -697,7 +697,8 @@ input:disabled {
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  aspect-ratio: auto;
+  /* Keep preview and export cards on the same fixed 3:4 canvas. */
+  aspect-ratio: 3 / 4;
   padding: 29px 34px 22px;
   overflow: hidden;
   animation: card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
