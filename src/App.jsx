@@ -871,7 +871,6 @@ export default function App() {
               </button>
             </div>
             <div className="download-actions">
-              {revisionHistory.length ? <button type="button" onClick={undoRevision} disabled={busy} title="撤销上一版">撤销 ({revisionHistory.length})</button> : null}
               <button
                 type="button"
                 className="secondary-icon-action"
@@ -887,7 +886,7 @@ export default function App() {
                 onClick={downloadAll}
                 disabled={!normalizedData || downloading}
                 aria-label={downloading ? "正在生成全部图片" : "下载全部图片"}
-                title={downloading ? "正在生成全部图片" : "全部（PNG）"}
+                title={downloading ? "正在生成全部图片" : "下载全部图片"}
               >
                 {downloading ? (
                   <span className="mini-loader" aria-hidden="true" />
@@ -895,8 +894,6 @@ export default function App() {
                   <DownloadSimple size={20} weight="bold" />
                 )}
               </button>
-              <button type="button" onClick={downloadCurrent} disabled={!normalizedData || downloading} title="下载当前页 PNG">当前页</button>
-              <button type="button" onClick={downloadPdf} disabled={!normalizedData || downloading} title="下载 PDF">PDF</button>
               <button
                 type="button"
                 className={`copy-action${copied ? " is-copied" : ""}`}
