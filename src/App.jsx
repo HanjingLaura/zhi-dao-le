@@ -25,43 +25,17 @@ import {
   paginateJd,
   publicJdData
 } from "./lib/jd.js";
+import { apiPath, postJson } from "./lib/api.js";
 import {
   getBrowserJobLibrary,
   sortLibraryJobs
 } from "./lib/job-library.js";
-
-const APP_BASE_PATH = String(import.meta.env.VITE_APP_BASE_PATH || "").replace(
-  /\/+$/,
-  ""
-);
-
-const apiPath = (path) => {
-  const normalizedPath = String(path || "").replace(/^\/+|\/+$/g, "");
-  return APP_BASE_PATH
-    ? `${APP_BASE_PATH}/api/${normalizedPath}/`
-    : `/api/${normalizedPath}`;
-};
 
 const safeFilename = (value) =>
   String(value || "岗位卡片")
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
     .replace(/\s+/g, "-")
     .slice(0, 50);
-
-async function postJson(url, body) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload.error || "请求失败，请稍后重试");
-    error.code = payload.code;
-    throw error;
-  }
-  return payload.data;
-}
 
 async function writeClipboard(text) {
   if (navigator.clipboard?.writeText) {

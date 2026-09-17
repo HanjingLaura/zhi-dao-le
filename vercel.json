@@ -17,12 +17,28 @@
       "destination": "/api/index?__zhidaole_path="
     },
     {
+      "source": "/zhidaole/api/",
+      "destination": "/api/index?__zhidaole_path="
+    },
+    {
+      "source": "/zhidaole/api/:path/",
+      "destination": "/api/index?__zhidaole_path=:path"
+    },
+    {
       "source": "/zhidaole/api/:path*",
       "destination": "/api/index?__zhidaole_path=:path*"
     },
     {
+      "source": "/api/:path/",
+      "destination": "/api/index?__zhidaole_path=:path"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/index?__zhidaole_path=:path*"
+    },
+    {
+      "source": "/zhidaole/",
+      "destination": "/index.html"
     },
     {
       "source": "/zhidaole",
