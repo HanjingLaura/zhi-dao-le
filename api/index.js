@@ -8,16 +8,25 @@ export function restoreApiUrl(request) {
     `http://${request.headers.host || "localhost"}`
   );
   const rewrittenPath = requestUrl.searchParams.get(REWRITTEN_PATH_PARAM);
-  if (rewrittenPath === null) return;
+  if (rewrittenPath !== null) {
+    requestUrl.searchParams.delete(REWRITTEN_PATH_PARAM);
+    if (requestUrl.searchParams.get("path") === rewrittenPath) {
+      requestUrl.searchParams.delete("path");
+    }
 
-  requestUrl.searchParams.delete(REWRITTEN_PATH_PARAM);
-  if (requestUrl.searchParams.get("path") === rewrittenPath) {
-    requestUrl.searchParams.delete("path");
+    const normalizedPath = rewrittenPath.replace(/^\/+|\/+$/g, "");
+    const query = requestUrl.searchParams.toString();
+    request.url = `/api/${normalizedPath}${query ? `?${query}` : ""}`;
+    return;
   }
 
-  const normalizedPath = rewrittenPath.replace(/^\/+/, "");
-  const query = requestUrl.searchParams.toString();
-  request.url = `/api/${normalizedPath}${query ? `?${query}` : ""}`;
+  if (
+    (requestUrl.pathname.startsWith("/api/") ||
+      requestUrl.pathname.startsWith("/zhidaole/api/")) &&
+    requestUrl.pathname.endsWith("/")
+  ) {
+    request.url = `${requestUrl.pathname.replace(/\/+$/, "")}${requestUrl.search}`;
+  }
 }
 
 export default function handler(request, response) {

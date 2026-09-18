@@ -13,6 +13,16 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "256kb" }));
+app.use((request, _response, next) => {
+  const [pathname, query] = String(request.url || "/").split("?");
+  if (
+    (pathname.startsWith("/api/") || pathname.startsWith("/zhidaole/api/")) &&
+    pathname.endsWith("/")
+  ) {
+    request.url = `${pathname.replace(/\/+$/, "")}${query ? `?${query}` : ""}`;
+  }
+  next();
+});
 
 app.get("/favicon.ico", (_request, response) => response.status(204).end());
 
